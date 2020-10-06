@@ -13,7 +13,7 @@
     "disable-redzone": true,
     "features": "-mmx,-sse,+soft-float,+rdrnd",
     "dynamic-linking-available": false,
-    "code-model": "small",
+    "code-model": "medium",
     "position-independent-executables": false,
     "relocation-model": "pic",
     "relro-level": "full",

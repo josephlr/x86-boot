@@ -8,7 +8,7 @@ use x86_64::structures::{
         Descriptor, DescriptorFlags as Flags, GlobalDescriptorTable as Table,
         SegmentSelector as Selector,
     },
-    DescriptorTablePointer as Pointer,
+    DescriptorTablePointer,
 };
 use x86_64::PrivilegeLevel::Ring0;
 
@@ -61,6 +61,13 @@ pub unsafe extern "C" fn start32() {
     asm!(".code32",
         // Setup our 64-bit GDT (not used until the long jump below)
         "lgdt [{gdt_ptr}]",
+
+        // This is equivalent to: memcpy(pt_virt_start, pt_phys_start, pt_size)
+        "lea edi, [data_start]",
+        "lea esi, [rom_data_start]",
+        "mov ecx, offset data_size",
+        "rep movsb [edi], [esi]",
+
         // Load our static page tables
         "lea eax, [rust_page_tables]",
         "mov cr3, eax",
@@ -126,17 +133,26 @@ const CS32: Selector = Selector::new(1, Ring0);
 const CS64: Selector = Selector::new(2, Ring0);
 const DS: Selector = Selector::new(3, Ring0);
 
-// #[link_section = ".boot.gdt_ptr"]
-static GDT_PTR: Pointer = GDT.pointer();
-// #[link_section = ".boot.gdt"]
-static GDT: Table = make_gdt();
-
-const fn make_gdt() -> Table {
-    let kernel_code32 = Descriptor::UserSegment(Flags::KERNEL_CODE32.bits());
-
-    let mut gdt = Table::new();
-    assert!(CS32.0 == gdt.add_entry(kernel_code32).0);
-    assert!(CS64.0 == gdt.add_entry(Descriptor::kernel_code_segment()).0);
-    assert!(DS.0 == gdt.add_entry(Descriptor::kernel_data_segment()).0);
-    gdt
+// struct Pointer 
+#[repr(C, packed)]
+pub struct Pointer {
+    pub limit: u16,
+    pub base: *const Flags,
 }
+unsafe impl Send for Pointer {}
+unsafe impl Sync for Pointer {}
+
+// #[link_section = ".boot.gdt_ptr"]
+static GDT_PTR: Pointer = Pointer{limit: 31, base: GDT.as_ptr()};
+// #[link_section = ".boot.gdt"]
+static GDT: [Flags; 4] = [Flags::empty(), Flags::KERNEL_CODE32, Flags::KERNEL_CODE64, Flags::KERNEL_DATA];
+
+// const fn make_gdt() -> Table {
+//     let kernel_code32 = Descriptor::UserSegment(Flags::KERNEL_CODE32.bits());
+
+//     let mut gdt = Table::new();
+//     assert!(CS32.0 == gdt.add_entry(kernel_code32).0);
+//     assert!(CS64.0 == gdt.add_entry(Descriptor::kernel_code_segment()).0);
+//     assert!(DS.0 == gdt.add_entry(Descriptor::kernel_data_segment()).0);
+//     gdt
+// }

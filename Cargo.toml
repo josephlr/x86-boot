@@ -16,8 +16,8 @@ lto = "fat"
 [dependencies]
 x86_64 = "0.12"
 
-[patch.crates-io]
-x86_64 = { path = "../x86_64" }
+# [patch.crates-io]
+# x86_64 = { path = "../x86_64" }
 
 [dev-dependencies]
 uart_16550 = "0.2.10"
