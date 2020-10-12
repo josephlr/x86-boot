@@ -1,73 +1,3 @@
-#![no_std]
-#![no_main]
-#![feature(asm, naked_functions)]
-#![feature(const_panic, const_ptr_offset, const_mut_refs)]
-
-use core::panic::PanicInfo;
-use core::{fmt, mem::align_of};
-use uart_16550::SerialPort;
-use x86_64::{
-    structures::paging::{PageSize, PageTableFlags as Flags, Size2MiB},
-    PhysAddr,
-};
-
-#[naked]
-#[no_mangle]
-#[link_section = ".boot.reset"]
-unsafe extern "C" fn reset() {
-    asm!(
-        ".code16",
-        ".align 16",
-        "mov eax, offset {code16}",
-        "jmp ax",
-        code16 = sym x86_boot::start16,
-        options(noreturn),
-    )
-}
-
-#[no_mangle]
-extern "C" fn rust_start() {
-    use core::{fmt::Write, ptr::{read_volatile, write_volatile}};
-    let mut serial = unsafe { SerialPort::new(0x3f8) };
-    serial.init();
-
-    let p = ((1u64 << 21) + 0x1000) as *mut u64;
-    unsafe { write_volatile(p, 0xff) };
-    let b = unsafe { read_volatile(p) };
-    writeln!(serial, "{:p} - 0x{:x}", p, b).unwrap();
-    let p = ((1u64 << 39) + 0x1000) as *mut u64;
-    let b = unsafe { read_volatile(p) };
-    writeln!(serial, "{:p} - 0x{:x}", p, b).unwrap();
-
-    writeln!(serial, "Old L2 {:?}", L2_FLAGS).unwrap();
-    writeln!(serial, "Old L3 {:?}", FLAGS).unwrap();
-    writeln!(serial, "Old L4 {:?}", FLAGS).unwrap();
-
-    let l2 = unsafe { read_volatile(&PML2[3].0[511]) };
-    let l3 = unsafe { read_volatile(&PML3[0].0[3])};
-    let l4 = unsafe { read_volatile(&PML4[0].0[0])};
-    writeln!(serial, "New L2 {:?}", l2.flags()).unwrap();
-    writeln!(serial, "New L3 {:?}", l3.flags()).unwrap();
-    writeln!(serial, "New L4 {:?}", l4.flags()).unwrap();
-
-    let l2 = unsafe { read_volatile(&PML2[0].0[0]) };
-    let l3 = unsafe { read_volatile(&PML3[0].0[0])};
-    let l4 = unsafe { read_volatile(&PML4[0].0[0])};
-    writeln!(serial, "New L2 {:?}", l2.flags()).unwrap();
-    writeln!(serial, "New L3 {:?}", l3.flags()).unwrap();
-    writeln!(serial, "New L4 {:?}", l4.flags()).unwrap();
-
-    for b in b"Hello, World!\nMy name is Joe!\n" {
-        serial.send(*b);
-    }
-    loop {}
-}
-
-#[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
-}
-
 /// Alternative to x86_64::PageTableEntry that can be used with static pointers.
 struct Entry(*const u8);
 unsafe impl Send for Entry {}
@@ -116,13 +46,13 @@ impl Table {
     }
 }
 
-// Number of GiB to identity map (max 512 GiB)
-const ADDRESS_SPACE_GIB: usize = 4;
-
 // Common flags to all page table entries.
-const FLAGS: Flags = Flags::from_bits_truncate(Flags::PRESENT.bits() | Flags::WRITABLE.bits() | Flags::ACCESSED.bits());
+const FLAGS: Flags = Flags::from_bits_truncate(
+    Flags::PRESENT.bits() | Flags::WRITABLE.bits() | Flags::ACCESSED.bits(),
+);
 // Set HUGE_PAGE in our L2 so we don't need to have a PML1
-const L2_FLAGS: Flags = Flags::from_bits_truncate(FLAGS.bits() | Flags::DIRTY.bits() | Flags::HUGE_PAGE.bits());
+const L2_FLAGS: Flags =
+    Flags::from_bits_truncate(FLAGS.bits() | Flags::DIRTY.bits() | Flags::HUGE_PAGE.bits());
 
 // Make a PML2 that maps virtual addresses [0, ADDRESS_SPACE_GIB) to a
 // contiguous range of physical addresses starting at `start`.
@@ -164,6 +94,6 @@ static PML2A: [Table; ADDRESS_SPACE_GIB] = make_pml2s(2 * (1 << 20));
 #[link_section = ".boot.l3"]
 static PML3: [Table; 2] = [make_ptr_table(&PML2), make_ptr_table(&PML2A)];
 
-#[export_name = "rust_page_tables"]
+#[export_name = "__rust_page_tables"]
 #[link_section = ".boot.l4"]
 pub static PML4: [Table; 1] = [make_ptr_table(&PML3)];

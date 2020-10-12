@@ -18,6 +18,6 @@
     "relocation-model": "pic",
     "relro-level": "full",
     "pre-link-args": {
-        "ld.lld": ["--script=examples/bootrom/layout.ld", "--gc-sections"]
+        "ld.lld": ["--script=examples/bootrom.ld", "--gc-sections"]
     }
 }
