@@ -1,18 +1,18 @@
 #![no_std]
-#![feature(asm, naked_functions)]
-#![feature(const_in_array_repeat_expressions, const_mut_refs, const_panic)]
+#![feature(naked_functions, asm_const, const_mut_refs, inline_const)]
 
-#[cfg(not(target_arch = "x86_64"))]
-compile_error!("This library requires a x86_64 target");
+use core::arch::asm;
 
 #[cfg(feature = "start32")]
-use x86_64::registers::control::{Cr0Flags, Cr4Flags, Efer, EferFlags};
+use x86_64::registers::control::{Cr0Flags, Cr4Flags, EferFlags};
 
 #[cfg(feature = "start32")]
 pub mod gdt;
-
 #[cfg(feature = "build_page_tables")]
 pub mod paging;
+
+#[cfg(not(target_arch = "x86_64"))]
+compile_error!("This library requires a x86_64 target");
 
 /// # Safety
 #[naked]
@@ -94,23 +94,6 @@ pub unsafe extern "C" fn start32() {
         "mov [eax], ecx",
         // Load our page tables
         "mov cr3, eax",
-        l2_flags = const paging::L2_FLAGS.bits(),
-        pml2 = sym paging::PML2,
-        l2_entries = const paging::NUM_PML2_ENTRIES,
-        flags = const paging::FLAGS.bits(),
-        pml3 = sym paging::PML3,
-        l3_entries = const paging::NUM_PML3_ENTRIES,
-        pml4 = sym paging::PML4,
-    );
-    #[cfg(not(feature = "build_page_tables"))]
-    asm!(
-        ".code32",
-        // Load our pre-built page tables
-        "lea eax, [__rust_pml4]",
-        "mov cr3, eax",
-    );
-    asm!(
-        ".code32",
         // Setup our 64-bit GDT (not used until the long jump below)
         "lgdtl ({gdt_ptr})",
         // Set CR4.PAE (Physical Address Extension)
@@ -128,9 +111,16 @@ pub unsafe extern "C" fn start32() {
         "movl %eax, %cr0", // must be followed by a branch
         // Far jmp to 64-bit code
         "ljmpl ${cs}, ${code64}",
+        l2_flags = const paging::L2_FLAGS.bits(),
+        pml2 = sym paging::PML2,
+        l2_entries = const paging::NUM_PML2_ENTRIES,
+        flags = const paging::FLAGS.bits(),
+        pml3 = sym paging::PML3,
+        l3_entries = const paging::NUM_PML3_ENTRIES,
+        pml4 = sym paging::PML4,
         gdt_ptr = sym gdt::POINTER,
         pae = const Cr4Flags::PHYSICAL_ADDRESS_EXTENSION.bits(),
-        efer = const Efer::MSR.0,
+        efer = const 0xC000_0080u32,
         lme = const EferFlags::LONG_MODE_ENABLE.bits(),
         pg = const Cr0Flags::PAGING.bits(),
         cs = const gdt::CS64.0,
@@ -148,9 +138,7 @@ pub unsafe extern "C" fn start64() {
         "1:",
         "movabs  r15, offset _GLOBAL_OFFSET_TABLE_",
         "add     r15, rax",
-    );
-    #[cfg(feature = "init_data")]
-    asm!(
+
         "movabs  rsi, offset __init_data@GOTOFF",
         "add     rsi, r15",
         "movabs  rdi, offset __start_data@GOTOFF",
@@ -158,17 +146,14 @@ pub unsafe extern "C" fn start64() {
         "sub     rcx, rdi",
         "add     rdi, r15",
         "rep movsb [rdi], [rsi]",
-    );
-    #[cfg(feature = "zero_bss")]
-    asm!(
+
         "movabs  rdi, offset __start_bss@GOTOFF",
         "movabs  rcx, offset __stop_bss@GOTOFF",
         "sub     rcx, rdi",
         "add     rdi, r15",
         "xor     eax, eax",
         "rep stosb [rdi], al",
-    );
-    asm!(
+
         "movabs  rsp, offset __rust_stack_top@GOTOFF",
         "add     rsp, r15",
         "movabs  rax, offset __rust_start@GOTOFF",

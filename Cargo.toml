@@ -1,8 +1,8 @@
 [package]
 name = "x86-boot"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Joe Richey <joerichey@google.com>"]
-edition = "2018"
+edition = "2021"
 autoexamples = false
 
 [profile.dev]
@@ -21,10 +21,10 @@ init_data = []
 zero_bss = []
 
 [dependencies]
-x86_64 = { path = "../x86_64" }
+x86_64 = "0.14"
 
 [dev-dependencies]
-uart_16550 = "0.2.10"
+uart_16550 = "0.3"
 
 [[example]]
 name = "bootrom"

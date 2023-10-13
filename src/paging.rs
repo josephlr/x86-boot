@@ -22,4 +22,5 @@ pub static mut PML4: PageTable = PageTable::new();
 #[link_section = ".boot.page_tables"]
 pub static mut PML3: [PageTable; NUM_PML4_ENTRIES as _] = [PageTable::new()];
 #[link_section = ".boot.page_tables"]
-pub static mut PML2: [PageTable; NUM_PML3_ENTRIES as _] = [PageTable::new(); NUM_PML3_ENTRIES as _];
+pub static mut PML2: [PageTable; NUM_PML3_ENTRIES as _] =
+    [const { PageTable::new() }; NUM_PML3_ENTRIES as _];
