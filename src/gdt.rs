@@ -24,8 +24,8 @@ const fn make_gdt() -> GlobalDescriptorTable {
     let kernel_code32 = Descriptor::UserSegment(DescriptorFlags::KERNEL_CODE32.bits());
 
     let mut gdt = GlobalDescriptorTable::new();
-    assert!(CS32.0 == gdt.add_entry(kernel_code32).0);
-    assert!(CS64.0 == gdt.add_entry(Descriptor::kernel_code_segment()).0);
-    assert!(DS.0 == gdt.add_entry(Descriptor::kernel_data_segment()).0);
+    assert!(CS32.0 == gdt.append(kernel_code32).0);
+    assert!(CS64.0 == gdt.append(Descriptor::kernel_code_segment()).0);
+    assert!(DS.0 == gdt.append(Descriptor::kernel_data_segment()).0);
     gdt
 }

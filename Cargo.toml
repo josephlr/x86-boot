@@ -19,10 +19,10 @@ start16 = ["start32"]
 build_page_tables = ["start32"]
 
 [dependencies]
-x86_64 = "0.14"
+x86_64 = "0.15"
 
 [dev-dependencies]
-uart_16550 = "0.3"
+uart_16550 = "0.4"
 
 [[example]]
 name = "bootrom"
