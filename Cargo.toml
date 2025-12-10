@@ -17,8 +17,6 @@ default = ["start32", "build_page_tables"]
 start32 = []
 start16 = ["start32"]
 build_page_tables = ["start32"]
-init_data = []
-zero_bss = []
 
 [dependencies]
 x86_64 = "0.14"
