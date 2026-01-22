@@ -1,7 +1,7 @@
 Build with:
 
 ```
-cargo build --example=bootrom -Zbuild-std=core --release --target=examples/bootrom/x86_64-none.json
+cargo build --target=examples/bootrom.json -Zbuild-std=core --example=bootrom --features=start16 --release
 ```
 
 Strip

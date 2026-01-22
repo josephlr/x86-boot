@@ -1,7 +1,7 @@
+use x86_64::PrivilegeLevel::Ring0;
 use x86_64::structures::gdt::{
     Descriptor, DescriptorFlags, GlobalDescriptorTable, SegmentSelector,
 };
-use x86_64::PrivilegeLevel::Ring0;
 
 pub const CS32: SegmentSelector = SegmentSelector::new(1, Ring0);
 pub const CS64: SegmentSelector = SegmentSelector::new(2, Ring0);
@@ -12,12 +12,12 @@ pub(crate) struct DescriptorTablePointer {
     _base: &'static GlobalDescriptorTable,
 }
 
-#[link_section = ".boot.gdt"]
+#[unsafe(link_section = ".boot.gdt")]
 pub(crate) static POINTER: DescriptorTablePointer = DescriptorTablePointer {
     _limit: (4 * core::mem::size_of::<u64>() - 1) as u16,
     _base: &TABLE,
 };
-#[link_section = ".boot.gdt"]
+#[unsafe(link_section = ".boot.gdt")]
 pub static TABLE: GlobalDescriptorTable = make_gdt();
 
 const fn make_gdt() -> GlobalDescriptorTable {

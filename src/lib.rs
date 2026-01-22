@@ -1,51 +1,48 @@
-#![no_std]
-#![feature(naked_functions, asm_const, const_mut_refs, inline_const)]
+#![cfg_attr(not(test), no_std)]
 
-use core::arch::asm;
+use core::arch::naked_asm;
 
-#[cfg(feature = "start32")]
 use x86_64::registers::control::{Cr0Flags, Cr4Flags, EferFlags};
 
-#[cfg(feature = "start32")]
 pub mod gdt;
-#[cfg(feature = "build_page_tables")]
 pub mod paging;
 
 #[cfg(not(target_arch = "x86_64"))]
 compile_error!("This library requires a x86_64 target");
 
 /// # Safety
-#[naked]
-#[cfg(feature = "start16")]
-#[link_section = ".boot.text16"]
+#[unsafe(naked)]
+#[unsafe(link_section = ".boot.text16")]
 pub unsafe extern "C" fn start16() -> ! {
-    asm!(".code16",
+    naked_asm!(".code16",
         // Step 1: Disable interrupts
         "cli",
 
         // Step 2: Load the GDT
-        "movl ${gdt_ptr}, %ebx",
-        "lgdtl %cs:(%bx)",
+        // "mov ebx, offset {gdt_ptr}",
+        "lgdtd cs:[{gdt_ptr}]",
 
         // Step 3: Set CRO.PE
-        "movl %cr0, %eax",
-        "orb ${pe}, %al",
-        "movl %eax, %cr0", // must be followed by a branch
-        // Far jump to 32-bit code
-        "ljmpl ${cs}, ${code32}",
+        "mov eax, cr0",
+        "or eax, {pe}",
+        "mov cr0, eax", // must be followed by a branch
+
+        // ljmpd {cs} : {setup32} (manually compiled for 32-bit mode)
+        ".byte 0x66, 0xea",
+        ".long {setup32}",
+        ".short {cs}",
+        ".code64",
         gdt_ptr = sym gdt::POINTER,
         pe = const Cr0Flags::PROTECTED_MODE_ENABLE.bits(),
         cs = const gdt::CS32.0,
-        code32 = sym setup32,
-        options(noreturn, att_syntax)
+        setup32 = sym setup32,
     )
 }
 
-#[naked]
-#[cfg(feature = "start16")]
-#[link_section = ".boot.text32"]
+#[unsafe(naked)]
+#[unsafe(link_section = ".boot.text32")]
 unsafe extern "C" fn setup32() -> ! {
-    asm!(".code32",
+    naked_asm!(".code32",
         "mov ax, {ds}",
         "mov ds, eax",
         "mov es, eax",
@@ -53,21 +50,18 @@ unsafe extern "C" fn setup32() -> ! {
 
         // Zero out ebx, as we don't have a PVH StartInfo struct.
         "xor ebx, ebx",
-        "jmp short {code32}",
+        "jmp short {start32}",
+        ".code64",
         ds = const gdt::DS.0,
-        code32 = sym start32,
-        options(noreturn)
+        start32 = sym start32
     )
 }
 
 /// # Safety
-#[naked]
-#[cfg(feature = "start32")]
-#[link_section = ".boot.text32"]
+#[unsafe(naked)]
+#[unsafe(link_section = ".boot.text32")]
 pub unsafe extern "C" fn start32() {
-    #[cfg(feature = "build_page_tables")]
-    asm!(
-        ".code32",
+    naked_asm!(".code32",
         // Point PML2s at the beginning of RAM
         "xor ecx, ecx",
         "mov eax, {l2_flags}",
@@ -95,22 +89,25 @@ pub unsafe extern "C" fn start32() {
         // Load our page tables
         "mov cr3, eax",
         // Setup our 64-bit GDT (not used until the long jump below)
-        "lgdtl ({gdt_ptr})",
+        "lgdtd [{gdt_ptr}]",
         // Set CR4.PAE (Physical Address Extension)
-        "movl %cr4, %eax",
-        "orb ${pae}, %al",
-        "movl %eax, %cr4",
+        "mov eax, cr4",
+        "or eax, {pae}",
+        "mov cr4, eax",
         // Set EFER.LME (Long Mode Enable)
-        "movl ${efer}, %ecx",
+        "mov ecx, {efer}",
         "rdmsr",
-        "orl ${lme}, %eax",
+        "or eax, {lme}",
         "wrmsr",
         // Set CRO.PG (Paging), must happen after the above 3 steps
-        "movl %cr0, %eax",
-        "orl ${pg}, %eax",
-        "movl %eax, %cr0", // must be followed by a branch
-        // Far jmp to 64-bit code
-        "ljmpl ${cs}, ${code64}",
+        "mov eax, cr0",
+        "or eax, {pg}",
+        "mov cr0, eax", // must be followed by a branch
+        // ljmpd {cs} : {start64} (manually compiled for 32-bit mode)
+        ".byte 0xea",
+        ".long {start64}",
+        ".short {cs}",
+        ".code64",
         l2_flags = const paging::L2_FLAGS.bits(),
         pml2 = sym paging::PML2,
         l2_entries = const paging::NUM_PML2_ENTRIES,
@@ -124,21 +121,19 @@ pub unsafe extern "C" fn start32() {
         lme = const EferFlags::LONG_MODE_ENABLE.bits(),
         pg = const Cr0Flags::PAGING.bits(),
         cs = const gdt::CS64.0,
-        code64 = sym start64,
-        options(noreturn, att_syntax)
+        start64 = sym start64,
     )
 }
 
 /// # Safety
-#[naked]
-#[link_section = ".boot.text64"]
+#[unsafe(naked)]
+#[unsafe(link_section = ".boot.text64")]
 pub unsafe extern "C" fn start64() {
-    asm!(
+    naked_asm!(
         "lea     rax, [rip + 1f]",
         "1:",
         "movabs  r15, offset _GLOBAL_OFFSET_TABLE_",
         "add     r15, rax",
-
         "movabs  rsi, offset __init_data@GOTOFF",
         "add     rsi, r15",
         "movabs  rdi, offset __start_data@GOTOFF",
@@ -146,19 +141,16 @@ pub unsafe extern "C" fn start64() {
         "sub     rcx, rdi",
         "add     rdi, r15",
         "rep movsb [rdi], [rsi]",
-
         "movabs  rdi, offset __start_bss@GOTOFF",
         "movabs  rcx, offset __stop_bss@GOTOFF",
         "sub     rcx, rdi",
         "add     rdi, r15",
         "xor     eax, eax",
         "rep stosb [rdi], al",
-
         "movabs  rsp, offset __rust_stack_top@GOTOFF",
         "add     rsp, r15",
         "movabs  rax, offset __rust_start@GOTOFF",
         "add     rax, r15",
         "jmp     rax",
-        options(noreturn)
     )
 }

@@ -1,31 +1,29 @@
 #![no_std]
 #![no_main]
-#![feature(asm, naked_functions)]
-#![feature(const_panic, const_ptr_offset, const_mut_refs)]
 
-use core::{fmt::Write, panic::PanicInfo};
+use core::{arch::naked_asm, fmt::Write, panic::PanicInfo};
 use uart_16550::SerialPort;
+use x86_64::structures::paging::page_table::PageTableEntry;
 
-#[naked]
-#[no_mangle]
-#[link_section = ".boot.reset"]
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".boot.reset")]
 unsafe extern "C" fn reset() {
-    asm!(
+    naked_asm!(
         ".code16",
         ".align 16",
-        "mov eax, offset {code16}",
-        "jmp ax",
+        "jmp {code16}",
+        ".code64",
         code16 = sym x86_boot::start16,
-        options(noreturn),
     )
 }
 
 const STACK_SIZE: usize = 512 * 1024; // 512 KiB
 #[used]
-#[link_section = ".stack"]
+#[unsafe(link_section = ".stack")]
 static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
-#[export_name = "__rust_start"]
+#[unsafe(export_name = "__rust_start")]
 extern "C" fn main() {
     let mut serial = unsafe { SerialPort::new(0x3f8) };
     serial.init();
@@ -38,15 +36,20 @@ extern "C" fn main() {
     unsafe {
         DATA += 1;
         BSS += 1;
-        writeln!(serial, "{} {}", DATA, BSS).unwrap();
+        writeln!(serial, "{} {}", *&raw const DATA, *&raw const BSS).unwrap();
     }
 
     for i in 0..=4 {
-        let entry = unsafe { &x86_boot::paging::PML2[0][i] };
+        let entry = get_pte(i);
         writeln!(serial, "{:6x} - {:?}", entry.addr(), entry.flags()).unwrap();
     }
 
     loop {}
+}
+
+#[inline(never)]
+fn get_pte(i: usize) -> &'static PageTableEntry {
+    unsafe { &x86_boot::paging::PML2[0][i] }
 }
 
 #[panic_handler]

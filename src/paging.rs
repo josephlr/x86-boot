@@ -17,10 +17,10 @@ pub const FLAGS: Flags = Flags::from_bits_truncate(
 pub const L2_FLAGS: Flags =
     Flags::from_bits_truncate(FLAGS.bits() | Flags::DIRTY.bits() | Flags::HUGE_PAGE.bits());
 
-#[link_section = ".boot.page_tables"]
+#[unsafe(link_section = ".boot.page_tables")]
 pub static mut PML4: PageTable = PageTable::new();
-#[link_section = ".boot.page_tables"]
+#[unsafe(link_section = ".boot.page_tables")]
 pub static mut PML3: [PageTable; NUM_PML4_ENTRIES as _] = [PageTable::new()];
-#[link_section = ".boot.page_tables"]
+#[unsafe(link_section = ".boot.page_tables")]
 pub static mut PML2: [PageTable; NUM_PML3_ENTRIES as _] =
     [const { PageTable::new() }; NUM_PML3_ENTRIES as _];

@@ -1,0 +1,17 @@
+[package]
+name = "bootrom"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Third BIOS stage of the `bootloader` crate"
+
+[[bin]]
+name = "bootem"
+path = "src/main.rs"
+
+[dependencies]
+uart_16550.workspace = true
+x86_64.workspace = true
+x86-boot = { path = ".." }
